@@ -2,15 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "../page";
+import UploadButton from "./UploadButton";
 
 interface Props {
   messages: Message[];
   isLoading: boolean;
   disabled: boolean;
   onSend: (message: string) => void;
+  onUpload: (files: File[]) => Promise<unknown>;
+  uploadedCount: number;
 }
 
-export default function ChatWindow({ messages, isLoading, disabled, onSend }: Props) {
+export default function ChatWindow({
+  messages,
+  isLoading,
+  disabled,
+  onSend,
+  onUpload,
+  uploadedCount,
+}: Props) {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -47,14 +57,10 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
       <div style={cw.feed}>
         {messages.length === 0 && !isLoading && (
           <div style={cw.empty}>
-            <div style={cw.emptyTitle}>O-1 Visa Evidence Advisor</div>
+            <div style={cw.emptyAvatar}>A</div>
+            <div style={cw.emptyTitle}>Hi, I&apos;m Ava</div>
             <p style={cw.emptyBody}>
-              Upload your evidence documents (resume, papers, pay stubs, articles…), then
-              describe your background or ask how your profile maps to O-1 criteria.
-            </p>
-            <p style={cw.emptyHint}>
-              Example: <em>"I have a PhD, 20 peer-reviewed papers with 800 citations, and led
-              engineering at a YC startup. What are my best O-1A criteria?"</em>
+              Your O-1 visa advisor. I&apos;m here to help — one step at a time.
             </p>
           </div>
         )}
@@ -67,14 +73,20 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
               ...(msg.role === "user" ? cw.userBubble : cw.asstBubble),
             }}
           >
-            <div style={cw.role}>{msg.role === "user" ? "You" : "Assistant"}</div>
+            <div style={cw.roleRow}>
+              {msg.role === "assistant" && <div style={cw.avatar}>A</div>}
+              <div style={cw.role}>{msg.role === "user" ? "You" : "Ava"}</div>
+            </div>
             <div style={cw.text}>{msg.content}</div>
           </div>
         ))}
 
         {isLoading && (
           <div style={{ ...cw.bubble, ...cw.asstBubble }}>
-            <div style={cw.role}>Assistant</div>
+            <div style={cw.roleRow}>
+              <div style={cw.avatar}>A</div>
+              <div style={cw.role}>Ava</div>
+            </div>
             <div style={cw.typing}>
               <span className="typing-dot" style={cw.dot}>●</span>
               <span className="typing-dot" style={cw.dot}>●</span>
@@ -86,6 +98,14 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
         <div ref={bottomRef} />
       </div>
 
+      {/* File count strip */}
+      {uploadedCount > 0 && (
+        <div style={cw.fileStrip}>
+          <span style={cw.fileStripDot}>●</span>
+          {uploadedCount} document{uploadedCount !== 1 ? "s" : ""} attached
+        </div>
+      )}
+
       {/* Input row */}
       <form
         style={cw.form}
@@ -94,6 +114,7 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
           submit();
         }}
       >
+        <UploadButton compact onUpload={onUpload} disabled={disabled} />
         <textarea
           ref={textareaRef}
           style={cw.textarea}
@@ -103,8 +124,8 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
           onKeyDown={handleKeyDown}
           placeholder={
             disabled
-              ? "Initialising — please wait…"
-              : "Describe your background or ask about O-1 criteria… (Enter to send)"
+              ? "Getting things ready — just a moment…"
+              : "Share your background or ask Ava about your O-1 criteria… (Enter to send)"
           }
           disabled={disabled || isLoading}
         />
@@ -112,7 +133,7 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend }: Pr
           type="submit"
           style={{
             ...cw.sendBtn,
-            opacity: disabled || isLoading || !input.trim() ? 0.45 : 1,
+            opacity: disabled || isLoading || !input.trim() ? 0.4 : 1,
             cursor: disabled || isLoading || !input.trim() ? "not-allowed" : "pointer",
           }}
           disabled={disabled || isLoading || !input.trim()}
@@ -139,6 +160,7 @@ const cw: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: 12,
   },
+  // Empty state (fallback)
   empty: {
     display: "flex",
     flexDirection: "column",
@@ -148,26 +170,33 @@ const cw: Record<string, React.CSSProperties> = {
     padding: "60px 24px",
     flex: 1,
   },
-  emptyTitle: {
+  emptyAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: "50%",
+    background: "#0d9488",
+    color: "#fff",
     fontSize: 22,
     fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 700,
     color: "#1e293b",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   emptyBody: {
     fontSize: 14,
     color: "#64748b",
-    maxWidth: 500,
+    maxWidth: 380,
     lineHeight: 1.65,
-    margin: "0 0 12px",
-  },
-  emptyHint: {
-    fontSize: 13,
-    color: "#94a3b8",
-    maxWidth: 500,
-    lineHeight: 1.6,
     margin: 0,
   },
+  // Message bubbles
   bubble: {
     padding: "10px 14px",
     borderRadius: 12,
@@ -187,17 +216,52 @@ const cw: Record<string, React.CSSProperties> = {
     alignSelf: "flex-start",
     borderBottomLeftRadius: 3,
   },
+  roleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  avatar: {
+    width: 18,
+    height: 18,
+    borderRadius: "50%",
+    background: "#0d9488",
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   role: {
     fontSize: 10,
     fontWeight: 700,
     opacity: 0.55,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
-    marginBottom: 4,
   },
   text: { fontSize: 14, lineHeight: 1.65, whiteSpace: "pre-wrap" },
   typing: { display: "flex", gap: 4, fontSize: 18, color: "#94a3b8" },
   dot: {},
+  // File count strip
+  fileStrip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "4px 20px",
+    fontSize: 12,
+    color: "#15803d",
+    background: "#f0fdf4",
+    borderTop: "1px solid #dcfce7",
+    flexShrink: 0,
+  },
+  fileStripDot: {
+    fontSize: 8,
+    color: "#22c55e",
+  },
+  // Input form
   form: {
     display: "flex",
     gap: 8,

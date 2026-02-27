@@ -1,11 +1,10 @@
 "use client";
 
 // app/dashboard/page.tsx
-// Main dashboard: 3-panel layout — criteria sidebar | upload bar + chat window.
+// Main dashboard: 3-panel layout — criteria sidebar | chat window.
 
 import { useEffect, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
-import UploadButton from "./components/UploadButton";
 import CriteriaCards from "./components/CriteriaCards";
 
 // ---------------------------------------------------------------------------
@@ -48,11 +47,23 @@ export interface Message {
 }
 
 // ---------------------------------------------------------------------------
+// Ava's opening message — shown as the first chat bubble on load
+// ---------------------------------------------------------------------------
+
+const AVA_GREETING: Message = {
+  role: "assistant",
+  content:
+    "Hi, I'm Ava — your O-1 visa advisor.\n\n" +
+    "I know this process can feel stressful and overwhelming, especially when so much is riding on it. You don't have to figure it out alone.\n\n" +
+    "Tell me about your background and achievements, and I'll help you understand which O-1 criteria your evidence could support. You can also attach documents using the + button — your CV, publications, recommendation letters, or pay stubs — and I'll reference them directly in my analysis.",
+};
+
+// ---------------------------------------------------------------------------
 // Dashboard page
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([AVA_GREETING]);
   const [criteria, setCriteria] = useState<CriteriaAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -130,7 +141,7 @@ export default function DashboardPage() {
   if (initError) {
     return (
       <div style={dp.errorPage}>
-        <h2 style={{ margin: "0 0 8px" }}>Initialisation error</h2>
+        <h2 style={{ margin: "0 0 8px" }}>Something went wrong</h2>
         <p style={{ color: "#64748b", marginBottom: 12 }}>{initError}</p>
         <p style={{ color: "#94a3b8", fontSize: 13 }}>
           Check your <code>OPENAI_API_KEY</code> and server logs, then refresh.
@@ -147,31 +158,22 @@ export default function DashboardPage() {
       <aside style={dp.sidebar}>
         <div style={dp.sidebarHead}>
           <span style={dp.sidebarTitle}>Criteria Assessment</span>
-          {!isInitialized && <span style={dp.initBadge}>Initialising…</span>}
+          {!isInitialized && <span style={dp.initBadge}>Getting ready…</span>}
         </div>
         <div style={dp.sidebarBody}>
           <CriteriaCards criteria={criteria} />
         </div>
       </aside>
 
-      {/* ── Main panel: upload bar + chat ── */}
+      {/* ── Main panel: chat window (with inline upload) ── */}
       <main style={dp.main}>
-        {/* Upload bar */}
-        <div style={dp.uploadBar}>
-          <UploadButton onUpload={handleUpload} disabled={!isInitialized} />
-          {uploadedCount > 0 && (
-            <span style={dp.fileCount}>
-              {uploadedCount} file{uploadedCount !== 1 ? "s" : ""} indexed
-            </span>
-          )}
-        </div>
-
-        {/* Chat window fills remaining height */}
         <ChatWindow
           messages={messages}
           isLoading={isLoading}
           disabled={!isInitialized}
           onSend={handleSend}
+          onUpload={handleUpload}
+          uploadedCount={uploadedCount}
         />
       </main>
     </div>
@@ -235,20 +237,6 @@ const dp: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     overflow: "hidden",
     minWidth: 0,
-  },
-  uploadBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 16px",
-    background: "#fff",
-    borderBottom: "1px solid #e2e8f0",
-    flexShrink: 0,
-  },
-  fileCount: {
-    fontSize: 13,
-    color: "#15803d",
-    fontWeight: 600,
   },
   /* Error page */
   errorPage: {
