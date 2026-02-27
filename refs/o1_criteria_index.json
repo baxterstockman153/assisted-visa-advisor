@@ -1,0 +1,30 @@
+{
+  "o1a": [
+    { "id": "o1a_1", "name": "Awards", "doc_section_hint": "o1a_criteria.md#criterion-1" },
+    { "id": "o1a_2", "name": "Membership (requires outstanding achievements)", "doc_section_hint": "o1a_criteria.md#criterion-2" },
+    { "id": "o1a_3", "name": "Published material about you", "doc_section_hint": "o1a_criteria.md#criterion-3" },
+    { "id": "o1a_4", "name": "Judge of others", "doc_section_hint": "o1a_criteria.md#criterion-4" },
+    { "id": "o1a_5", "name": "Original contributions of major significance", "doc_section_hint": "o1a_criteria.md#criterion-5" },
+    { "id": "o1a_6", "name": "Authorship of scholarly articles", "doc_section_hint": "o1a_criteria.md#criterion-6" },
+    { "id": "o1a_7", "name": "Critical/essential role for distinguished org", "doc_section_hint": "o1a_criteria.md#criterion-7" },
+    { "id": "o1a_8", "name": "High salary/remuneration", "doc_section_hint": "o1a_criteria.md#criterion-8" }
+  ],
+  "o1b_arts": [
+    { "id": "o1b_1", "name": "Lead/starring in distinguished productions/events", "doc_section_hint": "o1b_arts_criteria.md#criterion-1" },
+    { "id": "o1b_2", "name": "National/international recognition (published material)", "doc_section_hint": "o1b_arts_criteria.md#criterion-2" },
+    { "id": "o1b_3", "name": "Lead/starring/critical role for distinguished orgs", "doc_section_hint": "o1b_arts_criteria.md#criterion-3" },
+    { "id": "o1b_4", "name": "Major commercial or critically acclaimed successes", "doc_section_hint": "o1b_arts_criteria.md#criterion-4" },
+    { "id": "o1b_5", "name": "Significant recognition from orgs/critics/experts/government", "doc_section_hint": "o1b_arts_criteria.md#criterion-5" },
+    { "id": "o1b_6", "name": "High salary/substantial remuneration", "doc_section_hint": "o1b_arts_criteria.md#criterion-6" }
+  ],
+  "o1b_mptv": {
+    "standard": "Extraordinary achievement in motion picture or television",
+    "no_comparable_evidence": true,
+    "doc_section_hint": "o1b_mptv_rules.md"
+  },
+  "two_step_framework": {
+    "step_1": "Meet award OR 3+ criteria threshold",
+    "step_2": "Totality of evidence determines if standard is met",
+    "doc_section_hint": "o1_standard_and_process.md#b-determining-eligibility"
+  }
+}
