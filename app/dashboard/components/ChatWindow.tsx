@@ -430,14 +430,14 @@ const cw: Record<string, React.CSSProperties> = {
   },
   plusBtnDone: {
     background: "#f0fdf4",
-    borderColor: "#bbf7d0",
+    border: "1.5px solid #bbf7d0",
     color: "#166534",
     fontSize: 16,
     fontWeight: 600,
   },
   plusBtnError: {
     background: "#fef2f2",
-    borderColor: "#fecaca",
+    border: "1.5px solid #fecaca",
     color: "#991b1b",
     fontSize: 18,
     fontWeight: 700,
