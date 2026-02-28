@@ -5,7 +5,6 @@
 
 import { useEffect, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
-import UploadButton from "./components/UploadButton";
 import CriteriaCards from "./components/CriteriaCards";
 
 // ---------------------------------------------------------------------------
@@ -57,7 +56,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const [uploadedCount, setUploadedCount] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   // Call /api/init once on mount to ensure stores exist and cookies are set.
   useEffect(() => {
@@ -121,7 +120,7 @@ export default function DashboardPage() {
     const data = (await res.json()) as { success?: boolean; fileIds?: string[]; error?: string };
 
     if (!res.ok || data.error) throw new Error(data.error ?? "Upload failed");
-    setUploadedCount((n) => n + files.length);
+    setUploadedFiles((prev) => [...prev, ...files.map((f) => f.name)]);
     return data;
   };
 
@@ -154,24 +153,15 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* ── Main panel: upload bar + chat ── */}
+      {/* ── Main panel: chat (upload integrated into input row) ── */}
       <main style={dp.main}>
-        {/* Upload bar */}
-        <div style={dp.uploadBar}>
-          <UploadButton onUpload={handleUpload} disabled={!isInitialized} />
-          {uploadedCount > 0 && (
-            <span style={dp.fileCount}>
-              {uploadedCount} file{uploadedCount !== 1 ? "s" : ""} indexed
-            </span>
-          )}
-        </div>
-
-        {/* Chat window fills remaining height */}
         <ChatWindow
           messages={messages}
           isLoading={isLoading}
           disabled={!isInitialized}
           onSend={handleSend}
+          onUpload={handleUpload}
+          uploadedFiles={uploadedFiles}
         />
       </main>
     </div>
@@ -188,7 +178,7 @@ const dp: Record<string, React.CSSProperties> = {
     height: "100vh",
     fontFamily:
       "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    background: "#f1f5f9",
+    background: "#f1f0ff",
     overflow: "hidden",
   },
   /* Sidebar */
@@ -198,7 +188,7 @@ const dp: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     background: "#fff",
-    borderRight: "1px solid #e2e8f0",
+    borderRight: "1px solid #e8e5ff",
     overflow: "hidden",
   },
   sidebarHead: {
@@ -206,19 +196,19 @@ const dp: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: 8,
     padding: "14px 16px 10px",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid #f0efff",
     flexShrink: 0,
   },
   sidebarTitle: {
     fontSize: 11,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#7c3aed",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
   },
   initBadge: {
     fontSize: 10,
-    color: "#a16207",
+    color: "#92400e",
     background: "#fef9c3",
     padding: "1px 6px",
     borderRadius: 4,
@@ -235,20 +225,6 @@ const dp: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     overflow: "hidden",
     minWidth: 0,
-  },
-  uploadBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 16px",
-    background: "#fff",
-    borderBottom: "1px solid #e2e8f0",
-    flexShrink: 0,
-  },
-  fileCount: {
-    fontSize: 13,
-    color: "#15803d",
-    fontWeight: 600,
   },
   /* Error page */
   errorPage: {
