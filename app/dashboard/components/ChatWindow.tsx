@@ -17,9 +17,10 @@ interface Props {
   disabled: boolean;
   onSend: (message: string) => void;
   onUpload?: (files: File[]) => Promise<unknown>;
+  uploadedFiles?: string[];
 }
 
-export default function ChatWindow({ messages, isLoading, disabled, onSend, onUpload }: Props) {
+export default function ChatWindow({ messages, isLoading, disabled, onSend, onUpload, uploadedFiles }: Props) {
   const [input, setInput] = useState("");
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadError, setUploadError] = useState("");
@@ -198,6 +199,21 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
           )}
           {uploadStatus === "done" && "✓ Documents indexed — Ava can now reference them in her analysis"}
           {uploadStatus === "error" && `⚠ Upload issue: ${uploadError}`}
+        </div>
+      )}
+
+      {/* Indexed documents bar */}
+      {uploadedFiles && uploadedFiles.length > 0 && (
+        <div style={cw.filesBar}>
+          <span style={cw.filesBarLabel}>Indexed</span>
+          <div style={cw.fileChips}>
+            {uploadedFiles.map((name, i) => (
+              <span key={i} style={cw.fileChip}>
+                <span style={cw.fileChipDot}>●</span>
+                {name.length > 28 ? name.slice(0, 26) + "…" : name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -401,6 +417,49 @@ const cw: Record<string, React.CSSProperties> = {
     background: "#fef2f2",
     color: "#991b1b",
     borderTop: "1px solid #fecaca",
+  },
+  /* ── Indexed files bar ── */
+  filesBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "6px 16px",
+    background: "#f5f3ff",
+    borderTop: "1px solid #e8e5ff",
+    flexShrink: 0,
+    overflowX: "auto",
+  },
+  filesBarLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#7c3aed",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.07em",
+    flexShrink: 0,
+  },
+  fileChips: {
+    display: "flex",
+    gap: 6,
+    flexWrap: "nowrap" as const,
+    overflowX: "auto" as const,
+  },
+  fileChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 9px",
+    background: "#fff",
+    border: "1px solid #ddd6fe",
+    borderRadius: 6,
+    fontSize: 12,
+    color: "#4b5563",
+    whiteSpace: "nowrap" as const,
+    flexShrink: 0,
+  },
+  fileChipDot: {
+    fontSize: 7,
+    color: "#16a34a",
+    lineHeight: 1,
   },
   /* ── Input form ── */
   form: {

@@ -56,7 +56,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const [uploadedCount, setUploadedCount] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   // Call /api/init once on mount to ensure stores exist and cookies are set.
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function DashboardPage() {
     const data = (await res.json()) as { success?: boolean; fileIds?: string[]; error?: string };
 
     if (!res.ok || data.error) throw new Error(data.error ?? "Upload failed");
-    setUploadedCount((n) => n + files.length);
+    setUploadedFiles((prev) => [...prev, ...files.map((f) => f.name)]);
     return data;
   };
 
@@ -161,6 +161,7 @@ export default function DashboardPage() {
           disabled={!isInitialized}
           onSend={handleSend}
           onUpload={handleUpload}
+          uploadedFiles={uploadedFiles}
         />
       </main>
     </div>
