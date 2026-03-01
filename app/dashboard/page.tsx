@@ -1,11 +1,14 @@
 "use client";
 
 // app/dashboard/page.tsx
-// Main dashboard: 3-panel layout — criteria sidebar | upload bar + chat window.
+// Main dashboard: sidebar (criteria assessment + data collected tabs) | chat window.
 
 import { useEffect, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
 import CriteriaCards, { WhatWeNeedNext } from "./components/CriteriaCards";
+import CriteriaStoragePanel from "./components/CriteriaStoragePanel";
+import { mergeInstances } from "@/lib/criteriaStorage";
+import type { CriteriaInstance } from "@/lib/criteriaStorage";
 
 // ---------------------------------------------------------------------------
 // Shared types (imported by child components)
@@ -47,16 +50,27 @@ export interface Message {
 }
 
 // ---------------------------------------------------------------------------
+// Sidebar tab type
+// ---------------------------------------------------------------------------
+
+type SidebarTab = "assessment" | "data";
+
+// ---------------------------------------------------------------------------
 // Dashboard page
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [criteria, setCriteria] = useState<CriteriaAnalysis | null>(null);
+  const [criteriaInstances, setCriteriaInstances] = useState<CriteriaInstance[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<SidebarTab>("assessment");
+
+  // Notify user when new criteria data is collected (switch to data tab once)
+  const [hasAutoSwitched, setHasAutoSwitched] = useState(false);
 
   // Call /api/init once on mount to ensure stores exist and cookies are set.
   useEffect(() => {
@@ -74,18 +88,27 @@ export default function DashboardPage() {
   const handleSend = async (message: string) => {
     if (!isInitialized || isLoading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
+    const userMsg: Message = { role: "user", content: message };
+    setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
     try {
+      // Build conversation history (exclude current message — it's sent separately)
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({
+          message,
+          history,
+          criteriaInstances,
+        }),
       });
       const data = (await res.json()) as {
         explanation?: string;
         analysis?: CriteriaAnalysis;
+        criteriaInstances?: CriteriaInstance[];
         error?: string;
       };
 
@@ -98,8 +121,19 @@ export default function DashboardPage() {
       };
       setMessages((prev) => [...prev, asstMsg]);
 
-      // Update criteria sidebar whenever we get a fresh analysis.
+      // Update criteria sidebar when we get a fresh analysis.
       if (data.analysis) setCriteria(data.analysis);
+
+      // Merge newly extracted criteria instances with existing ones.
+      if (data.criteriaInstances && data.criteriaInstances.length > 0) {
+        setCriteriaInstances((prev) => mergeInstances(prev, data.criteriaInstances!));
+
+        // Auto-switch to data tab the first time we collect instances
+        if (!hasAutoSwitched) {
+          setActiveTab("data");
+          setHasAutoSwitched(true);
+        }
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -140,25 +174,84 @@ export default function DashboardPage() {
 
   // ── Main layout ─────────────────────────────────────────────────────────
 
+  const pendingCount = criteriaInstances.filter((i) => {
+    const pct = i.fields.length > 0
+      ? Math.round((i.fields.filter((f) => f.collected).length / i.fields.length) * 100)
+      : 100;
+    return pct < 100;
+  }).length;
+
   return (
     <div style={dp.layout}>
-      {/* ── Left sidebar: criteria cards + what we need next ── */}
+      {/* ── Left sidebar ── */}
       <aside style={dp.sidebar}>
+        {/* Sidebar header with tab switcher */}
         <div style={dp.sidebarHead}>
-          <span style={dp.sidebarTitle}>Criteria Assessment</span>
           {!isInitialized && <span style={dp.initBadge}>Initialising…</span>}
+          <div style={dp.tabs}>
+            <button
+              style={{
+                ...dp.tab,
+                ...(activeTab === "assessment" ? dp.tabActive : dp.tabInactive),
+              }}
+              onClick={() => setActiveTab("assessment")}
+            >
+              Assessment
+            </button>
+            <button
+              style={{
+                ...dp.tab,
+                ...(activeTab === "data" ? dp.tabActive : dp.tabInactive),
+              }}
+              onClick={() => setActiveTab("data")}
+            >
+              Data Collected
+              {criteriaInstances.length > 0 && (
+                <span
+                  style={{
+                    ...dp.tabBadge,
+                    background: pendingCount > 0 ? "#fef3c7" : "#dcfce7",
+                    color: pendingCount > 0 ? "#92400e" : "#15803d",
+                  }}
+                >
+                  {criteriaInstances.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        {/* Scrollable criteria area */}
+        {/* Scrollable content area */}
         <div style={dp.sidebarBody}>
-          <CriteriaCards criteria={criteria} />
+          {activeTab === "assessment" ? (
+            <CriteriaCards criteria={criteria} />
+          ) : (
+            <CriteriaStoragePanel instances={criteriaInstances} />
+          )}
         </div>
 
-        {/* Pinned "What We Need Next" footer */}
-        <WhatWeNeedNext criteria={criteria} onSend={handleSend} />
+        {/* Pinned "What We Need Next" footer — only on assessment tab */}
+        {activeTab === "assessment" && (
+          <WhatWeNeedNext criteria={criteria} onSend={handleSend} />
+        )}
+
+        {/* Data tab footer hint */}
+        {activeTab === "data" && criteriaInstances.length > 0 && (
+          <div style={dp.dataFooter}>
+            <div style={dp.dataFooterText}>
+              Keep chatting with Ava to fill in missing fields automatically.
+            </div>
+            <button
+              style={dp.switchBtn}
+              onClick={() => setActiveTab("assessment")}
+            >
+              ← Back to Assessment
+            </button>
+          </div>
+        )}
       </aside>
 
-      {/* ── Main panel: chat (upload integrated into input row) ── */}
+      {/* ── Main panel: chat ── */}
       <main style={dp.main}>
         <ChatWindow
           messages={messages}
@@ -197,31 +290,83 @@ const dp: Record<string, React.CSSProperties> = {
     overflow: "hidden",
   },
   sidebarHead: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "14px 16px 10px",
+    padding: "10px 12px 0",
     borderBottom: "1px solid #f0efff",
     flexShrink: 0,
   },
-  sidebarTitle: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: "#7c3aed",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-  },
   initBadge: {
+    display: "inline-block",
     fontSize: 10,
     color: "#92400e",
     background: "#fef9c3",
     padding: "1px 6px",
     borderRadius: 4,
+    marginBottom: 6,
+  },
+  /* Tab switcher */
+  tabs: {
+    display: "flex",
+    gap: 2,
+  },
+  tab: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    padding: "7px 8px",
+    border: "none",
+    background: "none",
+    cursor: "pointer",
+    fontSize: 11,
+    fontWeight: 600,
+    fontFamily: "inherit",
+    borderBottom: "2px solid transparent",
+    transition: "color 0.15s, border-color 0.15s",
+  },
+  tabActive: {
+    color: "#7c3aed",
+    borderBottomColor: "#7c3aed",
+  },
+  tabInactive: {
+    color: "#94a3b8",
+    borderBottomColor: "transparent",
+  },
+  tabBadge: {
+    fontSize: 9,
+    fontWeight: 700,
+    padding: "1px 5px",
+    borderRadius: 10,
   },
   sidebarBody: {
     flex: 1,
     overflowY: "auto",
     padding: 12,
+  },
+  dataFooter: {
+    padding: "10px 12px 12px",
+    borderTop: "1px solid #f0efff",
+    flexShrink: 0,
+  },
+  dataFooterText: {
+    fontSize: 11,
+    color: "#64748b",
+    lineHeight: 1.45,
+    marginBottom: 8,
+  },
+  switchBtn: {
+    display: "block",
+    width: "100%",
+    padding: "7px",
+    background: "none",
+    border: "1px solid #ddd6fe",
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#7c3aed",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "center",
   },
   /* Main panel */
   main: {
