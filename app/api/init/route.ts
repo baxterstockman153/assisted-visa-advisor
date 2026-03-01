@@ -1,5 +1,5 @@
 // app/api/init/route.ts
-// POST /api/init
+// POST /api/init  { apiKey?: string }
 // Creates (or reuses) a per-user evidence vector store and ensures the global
 // definitions store is built from /refs. Sets httpOnly cookies for both IDs.
 //
@@ -7,10 +7,11 @@
 
 export const runtime = "nodejs";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
-import { openai } from "@/lib/openai";
+import OpenAI from "openai";
+import { makeOpenAIClient } from "@/lib/openai";
 import { createVectorStore, attachFilesToVectorStore, pollVectorStoreFileBatch } from "@/lib/vectorStore";
 import {
   SESSION_COOKIE,
@@ -30,7 +31,7 @@ import {
 // ---------------------------------------------------------------------------
 let _cachedDefsVsId: string | null = null;
 
-async function ensureDefinitionsStore(): Promise<string> {
+async function ensureDefinitionsStore(client: OpenAI): Promise<string> {
   // 1. Env var wins — set this after the first run so you don't re-upload.
   if (process.env.DEFINITIONS_VECTOR_STORE_ID) {
     return process.env.DEFINITIONS_VECTOR_STORE_ID;
@@ -48,7 +49,7 @@ async function ensureDefinitionsStore(): Promise<string> {
 
   // 4. First ever run: create a new store and index all /refs files.
   console.log("[init] Creating definitions vector store from /refs …");
-  const store = await createVectorStore("O1 Visa Definitions");
+  const store = await createVectorStore("O1 Visa Definitions", client);
 
   const refsDir = path.join(process.cwd(), "refs");
   const filenames = fs
@@ -59,7 +60,7 @@ async function ensureDefinitionsStore(): Promise<string> {
   for (const filename of filenames) {
     const buf = fs.readFileSync(path.join(refsDir, filename));
     const mime = filename.endsWith(".json") ? "application/json" : "text/markdown";
-    const uploaded = await openai.files.create({
+    const uploaded = await client.files.create({
       file: new File([buf], filename, { type: mime }),
       purpose: "assistants",
     });
@@ -67,8 +68,8 @@ async function ensureDefinitionsStore(): Promise<string> {
     console.log(`[init] Uploaded ref file: ${filename} → ${uploaded.id}`);
   }
 
-  const batch = await attachFilesToVectorStore({ vectorStoreId: store.id, fileIds });
-  await pollVectorStoreFileBatch({ vectorStoreId: store.id, batchId: batch.id });
+  const batch = await attachFilesToVectorStore({ vectorStoreId: store.id, fileIds }, client);
+  await pollVectorStoreFileBatch({ vectorStoreId: store.id, batchId: batch.id }, client);
 
   _cachedDefsVsId = store.id;
   console.log(`[init] Definitions store ready: ${store.id}`);
@@ -79,8 +80,11 @@ async function ensureDefinitionsStore(): Promise<string> {
 
 // ---------------------------------------------------------------------------
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const body = await req.json().catch(() => ({})) as { apiKey?: string };
+    const client = makeOpenAIClient(body.apiKey);
+
     // Read existing cookies (may be undefined on first visit).
     const existingSessionId = await readSessionId();
     const existingUserVsId = await readUserVsId();
@@ -88,12 +92,12 @@ export async function POST() {
     const sessionId = existingSessionId ?? crypto.randomUUID();
 
     // Ensure global definitions store.
-    const defsVsId = await ensureDefinitionsStore();
+    const defsVsId = await ensureDefinitionsStore(client);
 
     // Ensure per-user evidence store.
     let userVsId = existingUserVsId;
     if (!userVsId) {
-      const userStore = await createVectorStore(`O1 Evidence [${sessionId.slice(0, 8)}]`);
+      const userStore = await createVectorStore(`O1 Evidence [${sessionId.slice(0, 8)}]`, client);
       userVsId = userStore.id;
       console.log(`[init] Created user evidence store: ${userVsId} for session ${sessionId}`);
     }
