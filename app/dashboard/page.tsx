@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
 import CriteriaCards, { WhatWeNeedNext } from "./components/CriteriaCards";
+import CriteriaInstancesPanel from "./components/CriteriaInstancesPanel";
 
 // ---------------------------------------------------------------------------
 // Shared types (imported by child components)
@@ -32,18 +33,33 @@ export interface NotSupportedEntry {
   reason: string;
 }
 
+export interface CriteriaInstanceFields {
+  [fieldName: string]: string | string[] | null;
+}
+
+export interface CriteriaInstance {
+  criteria_id: string;
+  criteria_name: string;
+  description: string;
+  fields: CriteriaInstanceFields;
+  missing_fields: string[];
+  complete: boolean;
+}
+
 export interface CriteriaAnalysis {
   top_criteria: CriterionEntry[];
   other_possible_criteria: CriterionEntry[];
   not_supported_yet: NotSupportedEntry[];
   classification_guess: string;
   disclaimer: string;
+  criteria_instances: CriteriaInstance[];
 }
 
 export interface Message {
   role: "user" | "assistant";
   content: string;
   analysis?: CriteriaAnalysis;
+  criteriaInstances?: CriteriaInstance[];
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +69,7 @@ export interface Message {
 export default function DashboardPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [criteria, setCriteria] = useState<CriteriaAnalysis | null>(null);
+  const [criteriaInstances, setCriteriaInstances] = useState<CriteriaInstance[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -86,6 +103,7 @@ export default function DashboardPage() {
       const data = (await res.json()) as {
         explanation?: string;
         analysis?: CriteriaAnalysis;
+        criteriaInstances?: CriteriaInstance[];
         error?: string;
       };
 
@@ -95,11 +113,28 @@ export default function DashboardPage() {
         role: "assistant",
         content: data.explanation ?? "(no explanation returned)",
         analysis: data.analysis,
+        criteriaInstances: data.criteriaInstances,
       };
       setMessages((prev) => [...prev, asstMsg]);
 
       // Update criteria sidebar whenever we get a fresh analysis.
       if (data.analysis) setCriteria(data.analysis);
+
+      // Update criteria instances — merge with latest (most recent wins per criteria_id).
+      if (data.criteriaInstances?.length) {
+        setCriteriaInstances((prev) => {
+          const merged = [...prev];
+          for (const incoming of data.criteriaInstances!) {
+            const idx = merged.findIndex((c) => c.criteria_id === incoming.criteria_id);
+            if (idx >= 0) {
+              merged[idx] = incoming;
+            } else {
+              merged.push(incoming);
+            }
+          }
+          return merged;
+        });
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -169,6 +204,13 @@ export default function DashboardPage() {
           uploadedFiles={uploadedFiles}
         />
       </main>
+
+      {/* ── Right panel: collected criteria instances ── */}
+      {criteriaInstances.length > 0 && (
+        <aside style={dp.instancesPanel}>
+          <CriteriaInstancesPanel instances={criteriaInstances} />
+        </aside>
+      )}
     </div>
   );
 }
@@ -230,6 +272,16 @@ const dp: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     overflow: "hidden",
     minWidth: 0,
+  },
+  /* Right instances panel */
+  instancesPanel: {
+    width: 340,
+    minWidth: 260,
+    display: "flex",
+    flexDirection: "column",
+    background: "#fff",
+    borderLeft: "1px solid #e8e5ff",
+    overflow: "hidden",
   },
   /* Error page */
   errorPage: {

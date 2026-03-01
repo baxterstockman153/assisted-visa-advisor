@@ -5,7 +5,7 @@
 //   • definitions vector store (refs/  — O-1 criteria definitions)
 //   • user evidence vector store    (uploaded documents)
 //
-// Returns: { explanation: string, analysis: CriteriaAnalysis | null, raw: string }
+// Returns: { explanation: string, analysis: CriteriaAnalysis | null, criteriaInstances: CriteriaInstance[], raw: string }
 //
 // SDK note: openai.responses.create() was introduced in SDK v4.77.0.
 // The vector_store_ids sit directly inside the file_search tool definition,
@@ -16,6 +16,23 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@/lib/openai";
 import { readUserVsId, readDefsVsId } from "@/lib/session";
+import { CRITERIA_DEFINITIONS } from "@/lib/criteriaSchema";
+
+// ---------------------------------------------------------------------------
+// Build the criteria fields reference block for the system prompt
+// ---------------------------------------------------------------------------
+
+function buildCriteriaFieldsBlock(): string {
+  return CRITERIA_DEFINITIONS.map((c) => {
+    const fieldLines = c.fields
+      .map((f) => {
+        const hint = f.hint ? ` — hint: "${f.hint}"` : "";
+        return `      - ${f.name} (${f.type})${hint}`;
+      })
+      .join("\n");
+    return `  • ${c.name} (${c.description}) [id: ${c.id}]:\n${fieldLines}`;
+  }).join("\n\n");
+}
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -44,10 +61,35 @@ AVAILABLE CRITERION IDs (use exactly as listed):
   O-1B MPTV: mptv (Extraordinary achievement in motion picture/television — single standard)
 
 ─────────────────────────────────────────────────────────────────────────────
+STRUCTURED CRITERIA DATA COLLECTION:
+
+In addition to the general analysis, you MUST collect structured data for the following specific criteria.
+For each criterion, extract the field values from what the user has shared. If a field value is not
+yet provided, set it to null and list the field in missing_fields.
+
+Required criteria and their fields:
+${buildCriteriaFieldsBlock()}
+
+For "files" and "files_or_urls" field types: if the user has mentioned uploading documents,
+pasting URLs, or referenced specific files, capture those references as an array of strings.
+If nothing has been provided, set to null.
+
+For "date" fields: extract dates mentioned by the user. Use YYYY-MM-DD format where possible,
+or whatever partial date was given (e.g. "2022" or "January 2022"). If not mentioned, null.
+
+For "text" fields: extract the relevant text the user shared about that field.
+
+IMPORTANT: After presenting your analysis, if any criteria_instances have missing_fields,
+you MUST explicitly ask the user for those missing fields at the end of your conversational response.
+Be specific — name which criteria and which fields are missing.
+─────────────────────────────────────────────────────────────────────────────
 RESPONSE FORMAT — you MUST follow this EXACTLY:
 
 Write a friendly 2–4 sentence summary suitable for a non-lawyer.
 (No headers, just plain prose for the chat window.)
+If any criteria have missing fields, end your response with a friendly but direct question
+asking for the specific missing information (e.g. "To complete your Critical Role profile,
+could you share your start date and some examples of your work?").
 
 Then output this exact delimiter on its own line:
 ---JSON---
@@ -79,7 +121,22 @@ Then output a single valid JSON object with this exact shape (no markdown fences
     }
   ],
   "classification_guess": "O-1A",
-  "disclaimer": "This analysis is for educational purposes only and does not constitute legal advice. Consult a qualified immigration attorney before making any decisions about your visa petition."
+  "disclaimer": "This analysis is for educational purposes only and does not constitute legal advice. Consult a qualified immigration attorney before making any decisions about your visa petition.",
+  "criteria_instances": [
+    {
+      "criteria_id": "critical_role",
+      "criteria_name": "Critical Role",
+      "description": "Founding Engineer at Bland",
+      "fields": {
+        "start_date": "2022-01-01",
+        "end_date": null,
+        "key_responsibilities": "Led backend architecture and infrastructure...",
+        "examples": ["https://example.com/roadmap", "uploaded: technical_diagram.pdf"]
+      },
+      "missing_fields": ["end_date", "examples"],
+      "complete": false
+    }
+  ]
 }
 
 FIELD RULES:
@@ -89,11 +146,14 @@ FIELD RULES:
 • strength           — exactly one of: "strong" | "medium" | "weak"
 • classification_guess — exactly one of: "O-1A" | "O-1B (Arts)" | "O-1B (MPTV)" | "unclear"
 • evidence[].file_id — use the real OpenAI file ID from citations, or null if unknown.
+• criteria_instances — ALWAYS include ALL four criteria instances, even if all fields are null.
+  - missing_fields: array of field names that are null/not yet provided
+  - complete: true only when ALL fields for that criterion are non-null
 • Do NOT emit markdown code fences around the JSON block.
 ─────────────────────────────────────────────────────────────────────────────`;
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Types
 // ---------------------------------------------------------------------------
 
 export interface EvidenceItem {
@@ -117,13 +177,31 @@ export interface NotSupportedEntry {
   reason: string;
 }
 
+export interface CriteriaInstanceFields {
+  [fieldName: string]: string | string[] | null;
+}
+
+export interface CriteriaInstance {
+  criteria_id: string;
+  criteria_name: string;
+  description: string;
+  fields: CriteriaInstanceFields;
+  missing_fields: string[];
+  complete: boolean;
+}
+
 export interface CriteriaAnalysis {
   top_criteria: CriterionEntry[];
   other_possible_criteria: CriterionEntry[];
   not_supported_yet: NotSupportedEntry[];
   classification_guess: string;
   disclaimer: string;
+  criteria_instances: CriteriaInstance[];
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function extractAnalysis(text: string): {
   explanation: string;
@@ -153,6 +231,15 @@ function extractAnalysis(text: string): {
 
   try {
     const analysis: CriteriaAnalysis = JSON.parse(jsonStr);
+
+    // Log the criteria instances for debugging / "database output" visibility
+    if (analysis.criteria_instances?.length) {
+      console.log("\n[chat] ══════════════════════════════════════════");
+      console.log("[chat] CRITERIA DATABASE INSTANCES:");
+      console.log(JSON.stringify(analysis.criteria_instances, null, 2));
+      console.log("[chat] ══════════════════════════════════════════\n");
+    }
+
     return { explanation, analysis };
   } catch (e) {
     console.warn("[chat] Failed to parse analysis JSON:", e);
@@ -215,7 +302,12 @@ export async function POST(req: NextRequest) {
     const rawText: string = response.output_text ?? "";
     const { explanation, analysis } = extractAnalysis(rawText);
 
-    return NextResponse.json({ explanation, analysis, raw: rawText });
+    return NextResponse.json({
+      explanation,
+      analysis,
+      criteriaInstances: analysis?.criteria_instances ?? [],
+      raw: rawText,
+    });
   } catch (err) {
     console.error("[chat] Error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
