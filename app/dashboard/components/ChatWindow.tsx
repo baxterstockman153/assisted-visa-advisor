@@ -9,7 +9,7 @@ type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 const AVA_GREETING = "Hi, I'm Ava.";
 const AVA_SUBTITLE =
-  "I'm your O-1 visa intake specialist. I'll guide you through providing the information your attorney needs — one step at a time. Feel free to ask questions at any point.";
+  "I'm your O-1 visa intake specialist. Tell me about yourself and your work — in your own words. I'll listen, ask follow-up questions where needed, and build your case from what you share.";
 
 interface Props {
   messages: Message[];
@@ -143,9 +143,10 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
                   className="fade-slide-in"
                   style={{ ...cw.hintText, animationDelay: "0.14s" }}
                 >
-                  Getting ready — Ava will ask you for each required piece of information.
-                  Use the <strong style={{ color: "#7c3aed" }}>+</strong> button to upload
-                  files at any time, or paste URLs directly in the chat.
+                  Share your background below, or use the{" "}
+                  <strong style={{ color: "#7c3aed" }}>+</strong> button to upload a
+                  resume, LinkedIn export, or any relevant documents. The more context you
+                  give, the less Ava needs to ask.
                 </p>
               </>
             )}
@@ -269,7 +270,7 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
           placeholder={
             disabled
               ? "Getting everything ready — just a moment…"
-              : "Share your background or ask Ava anything… (Enter to send)"
+              : "Describe your work, achievements, or ask Ava anything… (Enter to send)"
           }
           disabled={disabled || isLoading}
         />
