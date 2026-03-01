@@ -1,15 +1,12 @@
 // app/api/chat/route.ts
-// POST /api/chat  { message: string }
+// POST /api/chat  { messages: ConversationMessage[] }
 //
-// Uses the OpenAI Responses API (openai >= 4.77) with file_search across:
-//   • definitions vector store (refs/  — O-1 criteria definitions)
-//   • user evidence vector store    (uploaded documents)
+// Accepts the full conversation history so the model can build on earlier turns
+// when collecting structured criteria fields from the user.
 //
-// Returns: { explanation: string, analysis: CriteriaAnalysis | null, criteriaInstances: CriteriaInstance[], raw: string }
-//
-// SDK note: openai.responses.create() was introduced in SDK v4.77.0.
-// The vector_store_ids sit directly inside the file_search tool definition,
-// NOT in a separate `tool_resources` key (that pattern is Assistants API v2).
+// Returns:
+//   { explanation: string, analysis: CriteriaAnalysis | null,
+//     criteriaInstances: CriteriaInstance[], raw: string }
 
 export const runtime = "nodejs";
 
@@ -19,7 +16,7 @@ import { readUserVsId, readDefsVsId } from "@/lib/session";
 import { CRITERIA_DEFINITIONS } from "@/lib/criteriaSchema";
 
 // ---------------------------------------------------------------------------
-// Build the criteria fields reference block for the system prompt
+// Build the criteria fields reference for the system prompt
 // ---------------------------------------------------------------------------
 
 function buildCriteriaFieldsBlock(): string {
@@ -30,7 +27,11 @@ function buildCriteriaFieldsBlock(): string {
         return `      - ${f.name} (${f.type})${hint}`;
       })
       .join("\n");
-    return `  • ${c.name} (${c.description}) [id: ${c.id}]:\n${fieldLines}`;
+    return (
+      `  • [id: ${c.id}] ${c.name}\n` +
+      `    description to infer: ${c.descriptionHint}\n` +
+      `    fields:\n${fieldLines}`
+    );
   }).join("\n\n");
 }
 
@@ -38,19 +39,36 @@ function buildCriteriaFieldsBlock(): string {
 // System prompt
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are an O-1 visa criteria mapping assistant.
-You help users understand how their professional evidence maps to USCIS O-1 extraordinary-ability visa criteria.
+const SYSTEM_PROMPT = `You are Ava, an O-1 extraordinary-ability visa advisor.
+Your job is to help users build a strong O-1 petition by:
+  1. Learning about their background through conversation and/or uploaded documents.
+  2. Mapping their experience to the applicable O-1 criteria.
+  3. Collecting the specific structured fields needed for each relevant criterion.
+  4. Asking for anything that is still missing — conversationally, one step at a time.
 
 ⚠️  IMPORTANT: This tool is for EDUCATIONAL PURPOSES ONLY and does not constitute legal advice.
-    Always include the disclaimer in your JSON output.
 
-RULES YOU MUST FOLLOW:
-1. For criteria definitions and legal standards, ONLY use information retrieved via file_search
-   from the reference documents store. Do NOT rely on your training data for legal definitions.
-2. For evidence assessment, ONLY cite material actually found in the user's uploaded documents.
-   If a piece of evidence is NOT found, state it is missing — do NOT invent or assume it.
-3. Always include the disclaimer field.
+═══════════════════════════════════════════════════════════════════════════════
+CONVERSATION APPROACH
 
+Phase 1 — Understand the user
+If you don't yet know the user's background, ask them to share:
+  • Their current role and employer
+  • Key accomplishments or projects
+  • Any notable memberships, awards, or recognition
+  • Uploaded documents are also a valid source — reference them via file_search
+
+Phase 2 — Map to criteria
+Use the information gathered to assess which O-1 criteria apply.
+
+Phase 3 — Collect structured fields
+For each applicable criterion, extract the required fields from what the user has shared.
+If a field is missing, ask for it in a natural, conversational way — don't dump a list of
+questions all at once. Prioritise the most important missing field first.
+
+Phase 4 — Confirm and present
+Once enough data is collected, present a clean summary and the database-ready instances.
+═══════════════════════════════════════════════════════════════════════════════
 AVAILABLE CRITERION IDs (use exactly as listed):
   O-1A:      o1a_1 (Prizes/Awards), o1a_2 (Membership), o1a_3 (Published material about you),
              o1a_4 (Judge of others), o1a_5 (Original contributions), o1a_6 (Scholarly articles),
@@ -60,101 +78,137 @@ AVAILABLE CRITERION IDs (use exactly as listed):
              o1b_5 (Recognition from orgs/critics/experts), o1b_6 (High salary)
   O-1B MPTV: mptv (Extraordinary achievement in motion picture/television — single standard)
 
-─────────────────────────────────────────────────────────────────────────────
-STRUCTURED CRITERIA DATA COLLECTION:
+═══════════════════════════════════════════════════════════════════════════════
+STRUCTURED CRITERIA INSTANCES
 
-In addition to the general analysis, you MUST collect structured data for the following specific criteria.
-For each criterion, extract the field values from what the user has shared. If a field value is not
-yet provided, set it to null and list the field in missing_fields.
+You must track four criteria categories. For each, collect fields from the user's own words
+and uploaded documents. Do NOT invent or assume values.
 
-Required criteria and their fields:
+The "description" field in each instance must be derived from what the user tells you
+(e.g. "Senior Engineer at OpenAI", "Y Combinator W22", "MIT CSAIL"). Leave it null
+until you have enough context from the user to fill it accurately.
+
+Criteria categories and their fields:
 ${buildCriteriaFieldsBlock()}
 
-For "files" and "files_or_urls" field types: if the user has mentioned uploading documents,
-pasting URLs, or referenced specific files, capture those references as an array of strings.
-If nothing has been provided, set to null.
+FIELD EXTRACTION RULES:
+• text fields: extract verbatim or closely paraphrased from what the user shared.
+• date fields: use YYYY-MM-DD if possible; partial dates like "2022" or "March 2023" are fine.
+• files fields: if the user uploaded documents, list them as ["uploaded: filename.pdf"]; for URLs use the URL string.
+• files_or_urls: same as above — files or URLs, whichever the user provided.
+• If a value has not been mentioned at all, set it to null.
+• missing_fields: list every field name whose value is still null.
+• complete: true only when ALL fields for that criterion (including description) are non-null.
 
-For "date" fields: extract dates mentioned by the user. Use YYYY-MM-DD format where possible,
-or whatever partial date was given (e.g. "2022" or "January 2022"). If not mentioned, null.
+ASKING FOR MISSING INFORMATION:
+• At the end of your conversational response, if any criterion has missing fields, ask for
+  the single most important missing piece of information across all criteria.
+• Be natural — don't list all missing fields at once. Guide the user one question at a time.
+• Example: "Could you tell me when you started in your current role?" rather than a bullet list.
+═══════════════════════════════════════════════════════════════════════════════
+RESPONSE FORMAT — follow this EXACTLY on every turn:
 
-For "text" fields: extract the relevant text the user shared about that field.
-
-IMPORTANT: After presenting your analysis, if any criteria_instances have missing_fields,
-you MUST explicitly ask the user for those missing fields at the end of your conversational response.
-Be specific — name which criteria and which fields are missing.
-─────────────────────────────────────────────────────────────────────────────
-RESPONSE FORMAT — you MUST follow this EXACTLY:
-
-Write a friendly 2–4 sentence summary suitable for a non-lawyer.
-(No headers, just plain prose for the chat window.)
-If any criteria have missing fields, end your response with a friendly but direct question
-asking for the specific missing information (e.g. "To complete your Critical Role profile,
-could you share your start date and some examples of your work?").
+Write a warm, clear conversational response (2–5 sentences).
+If this is the first message and you don't know the user's background yet, introduce yourself
+briefly and ask them to describe their background or upload their documents.
+End with a specific, single follow-up question if any criteria fields are still missing.
 
 Then output this exact delimiter on its own line:
 ---JSON---
 
-Then output a single valid JSON object with this exact shape (no markdown fences):
+Then output a single valid JSON object (no markdown fences):
 {
   "top_criteria": [
     {
-      "criterion_id": "o1a_5",
-      "criterion_name": "Original Contributions of Major Significance",
+      "criterion_id": "o1a_7",
+      "criterion_name": "Critical or Essential Role",
       "strength": "strong",
-      "rationale": "Why this criterion is well-supported by the evidence.",
+      "rationale": "...",
       "evidence": [
-        {
-          "file_id": "file_abc123",
-          "snippet": "Relevant quoted passage from the document",
-          "why_it_matters": "How this passage satisfies the criterion"
-        }
+        { "file_id": null, "snippet": "...", "why_it_matters": "..." }
       ],
-      "gaps": ["What documentation is still needed to fully satisfy this criterion"],
-      "next_steps": ["Concrete action the petitioner can take to strengthen this criterion"]
+      "gaps": ["..."],
+      "next_steps": ["..."]
     }
   ],
   "other_possible_criteria": [],
   "not_supported_yet": [
-    {
-      "criterion_id": "o1a_3",
-      "reason": "No published materials about the beneficiary were found in the uploaded documents."
-    }
+    { "criterion_id": "o1a_3", "reason": "No published material found yet." }
   ],
   "classification_guess": "O-1A",
-  "disclaimer": "This analysis is for educational purposes only and does not constitute legal advice. Consult a qualified immigration attorney before making any decisions about your visa petition.",
+  "disclaimer": "This analysis is for educational purposes only and does not constitute legal advice. Consult a qualified immigration attorney before making any decisions.",
   "criteria_instances": [
     {
       "criteria_id": "critical_role",
       "criteria_name": "Critical Role",
-      "description": "Founding Engineer at Bland",
+      "description": null,
       "fields": {
-        "start_date": "2022-01-01",
+        "start_date": null,
         "end_date": null,
-        "key_responsibilities": "Led backend architecture and infrastructure...",
-        "examples": ["https://example.com/roadmap", "uploaded: technical_diagram.pdf"]
+        "key_responsibilities": null,
+        "examples": null
       },
-      "missing_fields": ["end_date", "examples"],
+      "missing_fields": ["description", "start_date", "end_date", "key_responsibilities", "examples"],
+      "complete": false
+    },
+    {
+      "criteria_id": "high_remuneration",
+      "criteria_name": "High Remuneration",
+      "description": null,
+      "fields": {
+        "work_location": null,
+        "salary": null,
+        "paystubs": null,
+        "equity_proof": null
+      },
+      "missing_fields": ["description", "work_location", "salary", "paystubs", "equity_proof"],
+      "complete": false
+    },
+    {
+      "criteria_id": "original_contributions",
+      "criteria_name": "Original Contributions",
+      "description": null,
+      "fields": {
+        "work_description": null,
+        "impact_description": null,
+        "supporting_evidence": null
+      },
+      "missing_fields": ["description", "work_description", "impact_description", "supporting_evidence"],
+      "complete": false
+    },
+    {
+      "criteria_id": "membership",
+      "criteria_name": "Membership",
+      "description": null,
+      "fields": {
+        "date_selected": null,
+        "proof_of_membership": null
+      },
+      "missing_fields": ["description", "date_selected", "proof_of_membership"],
       "complete": false
     }
   ]
 }
 
-FIELD RULES:
-• top_criteria       — up to 3 best-supported criteria; fewer if fewer qualify.
-• other_possible_criteria — same shape as top_criteria; weakly supported criteria.
-• not_supported_yet  — criteria with NO evidence found in uploaded docs.
-• strength           — exactly one of: "strong" | "medium" | "weak"
-• classification_guess — exactly one of: "O-1A" | "O-1B (Arts)" | "O-1B (MPTV)" | "unclear"
-• evidence[].file_id — use the real OpenAI file ID from citations, or null if unknown.
-• criteria_instances — ALWAYS include ALL four criteria instances, even if all fields are null.
-  - missing_fields: array of field names that are null/not yet provided
-  - complete: true only when ALL fields for that criterion are non-null
-• Do NOT emit markdown code fences around the JSON block.
-─────────────────────────────────────────────────────────────────────────────`;
+RULES:
+• criteria_instances — always include ALL FOUR, even if empty. Update fields as the user
+  provides more info across turns. The "description" field lives at the top level of each
+  instance (not inside "fields") and should reflect the user's actual role/org.
+• top_criteria — up to 3 best-supported; omit if no evidence yet.
+• strength — "strong" | "medium" | "weak"
+• classification_guess — "O-1A" | "O-1B (Arts)" | "O-1B (MPTV)" | "unclear"
+• evidence[].file_id — real OpenAI file ID from file_search citations, or null.
+• No markdown code fences around the JSON block.
+═══════════════════════════════════════════════════════════════════════════════`;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export interface EvidenceItem {
   file_id: string | null;
@@ -184,7 +238,7 @@ export interface CriteriaInstanceFields {
 export interface CriteriaInstance {
   criteria_id: string;
   criteria_name: string;
-  description: string;
+  description: string | null;
   fields: CriteriaInstanceFields;
   missing_fields: string[];
   complete: boolean;
@@ -211,11 +265,13 @@ function extractAnalysis(text: string): {
   const idx = text.indexOf(DELIMITER);
 
   if (idx === -1) {
-    // Delimiter missing — try to extract any JSON object as a fallback.
     const jsonMatch = text.match(/\{[\s\S]+\}/);
     if (jsonMatch) {
       try {
-        return { explanation: text.replace(jsonMatch[0], "").trim(), analysis: JSON.parse(jsonMatch[0]) };
+        return {
+          explanation: text.replace(jsonMatch[0], "").trim(),
+          analysis: JSON.parse(jsonMatch[0]),
+        };
       } catch {
         // fall through
       }
@@ -225,19 +281,15 @@ function extractAnalysis(text: string): {
 
   const explanation = text.slice(0, idx).trim();
   let jsonStr = text.slice(idx + DELIMITER.length).trim();
-
-  // Strip any accidental markdown code fences.
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
 
   try {
     const analysis: CriteriaAnalysis = JSON.parse(jsonStr);
 
-    // Log the criteria instances for debugging / "database output" visibility
     if (analysis.criteria_instances?.length) {
-      console.log("\n[chat] ══════════════════════════════════════════");
-      console.log("[chat] CRITERIA DATABASE INSTANCES:");
+      console.log("\n[chat] ══ CRITERIA DATABASE INSTANCES ════════════════");
       console.log(JSON.stringify(analysis.criteria_instances, null, 2));
-      console.log("[chat] ══════════════════════════════════════════\n");
+      console.log("[chat] ══════════════════════════════════════════════\n");
     }
 
     return { explanation, analysis };
@@ -273,23 +325,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { message?: string };
-    const message = body.message?.trim();
-    if (!message) {
-      return NextResponse.json({ error: "message is required." }, { status: 400 });
+    // Accept either the full conversation history or a bare { message } for backwards compat
+    const body = (await req.json()) as {
+      messages?: ConversationMessage[];
+      message?: string;
+    };
+
+    const conversationHistory: ConversationMessage[] =
+      body.messages ??
+      (body.message ? [{ role: "user", content: body.message }] : []);
+
+    if (!conversationHistory.length) {
+      return NextResponse.json({ error: "messages is required." }, { status: 400 });
     }
 
-    // ------------------------------------------------------------------
-    // OpenAI Responses API  (SDK >= 4.77)
-    // file_search vector_store_ids live inside the tool definition,
-    // not in a separate tool_resources key.
-    // ------------------------------------------------------------------
+    // Build input: system prompt + full conversation history
+    const input = [
+      { role: "system" as const, content: SYSTEM_PROMPT },
+      ...conversationHistory.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    ];
+
     const response = await openai.responses.create({
       model: "gpt-4o",
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: message },
-      ],
+      input,
       tools: [
         {
           type: "file_search",

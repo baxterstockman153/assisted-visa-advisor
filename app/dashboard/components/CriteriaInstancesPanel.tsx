@@ -84,28 +84,56 @@ function InstanceCard({
   instance: CriteriaInstance | null;
 }) {
   const isComplete = instance?.complete ?? false;
-  const missingFields = instance?.missing_fields ?? definition.fields.map((f) => f.name);
+  const missingFields = instance?.missing_fields ?? ["description", ...definition.fields.map((f) => f.name)];
   const fields: CriteriaInstanceFields = instance?.fields ?? {};
+  const description = instance?.description ?? null;
+
+  // Total fields = description + all named fields
+  const totalFieldCount = 1 + definition.fields.length;
+  const allMissing = missingFields.length === totalFieldCount;
 
   return (
     <div style={{ ...ci.card, ...(isComplete ? ci.cardComplete : {}) }}>
       {/* Card header */}
       <div style={ci.cardHeader}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={ci.cardName}>{definition.name}</div>
-          <div style={ci.cardDesc}>{definition.description}</div>
+          {/* Dynamic description derived from user's data */}
+          {description ? (
+            <div style={ci.cardDesc}>{description}</div>
+          ) : (
+            <div style={{ ...ci.cardDesc, ...ci.cardDescPending }}>
+              {definition.descriptionHint}
+            </div>
+          )}
         </div>
         <div
           style={{
             ...ci.statusBadge,
-            ...(isComplete ? ci.statusComplete : missingFields.length === definition.fields.length ? ci.statusEmpty : ci.statusPartial),
+            ...(isComplete ? ci.statusComplete : allMissing ? ci.statusEmpty : ci.statusPartial),
           }}
         >
-          {isComplete ? "Complete" : missingFields.length === definition.fields.length ? "Not started" : "Partial"}
+          {isComplete ? "Complete" : allMissing ? "Not started" : "Partial"}
         </div>
       </div>
 
-      {/* Fields */}
+      {/* Description field row */}
+      <div style={{ ...ci.field, ...(description ? ci.fieldFilled : ci.fieldMissing) }}>
+        <div style={ci.fieldName}>Context / Role</div>
+        {description ? (
+          <div style={ci.fieldValue}>
+            <span style={ci.filledDot}>●</span>
+            <span style={ci.textValue}>{description}</span>
+          </div>
+        ) : (
+          <div style={ci.fieldEmpty}>
+            <span style={ci.missingDot}>○</span>
+            <span style={ci.fieldHint}>Ava will fill this from your background</span>
+          </div>
+        )}
+      </div>
+
+      {/* Named fields */}
       <div style={ci.fieldsGrid}>
         {definition.fields.map((fieldDef) => {
           const value = fields[fieldDef.name];
@@ -241,6 +269,10 @@ const ci: Record<string, React.CSSProperties> = {
     fontSize: 11,
     color: "#6b7280",
     marginTop: 2,
+  },
+  cardDescPending: {
+    color: "#9ca3af",
+    fontStyle: "italic",
   },
   statusBadge: {
     fontSize: 10,

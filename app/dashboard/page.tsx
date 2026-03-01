@@ -91,14 +91,20 @@ export default function DashboardPage() {
   const handleSend = async (message: string) => {
     if (!isInitialized || isLoading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
+    // Build the new history including the message being sent now.
+    const userMsg: Message = { role: "user", content: message };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setIsLoading(true);
+
+    // Send the full conversation so the model can build on earlier turns.
+    const history = nextMessages.map((m) => ({ role: m.role, content: m.content }));
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ messages: history }),
       });
       const data = (await res.json()) as {
         explanation?: string;
@@ -205,8 +211,8 @@ export default function DashboardPage() {
         />
       </main>
 
-      {/* ── Right panel: collected criteria instances ── */}
-      {criteriaInstances.length > 0 && (
+      {/* ── Right panel: collected criteria instances (always visible once initialised) ── */}
+      {isInitialized && (
         <aside style={dp.instancesPanel}>
           <CriteriaInstancesPanel instances={criteriaInstances} />
         </aside>

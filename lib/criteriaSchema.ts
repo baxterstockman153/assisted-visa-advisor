@@ -1,7 +1,10 @@
 // lib/criteriaSchema.ts
-// Defines the structured field requirements for each O-1 visa criterion.
-// The bot uses these definitions to know what information to collect from the user,
-// and to produce database-ready instances once all fields are gathered.
+// Defines the structured field requirements for each O-1 visa criterion category.
+//
+// IMPORTANT: The `description` on each definition is a hint for the bot — it tells
+// the bot *what kind* of context to look for in the user's story. The actual
+// description saved in a CriteriaInstance (e.g. "Senior Engineer at OpenAI") is
+// derived dynamically from what the user shares, not hardcoded here.
 
 export type FieldType = "date" | "text" | "files" | "files_or_urls";
 
@@ -14,16 +17,17 @@ export interface CriteriaField {
 export interface CriteriaDefinition {
   id: string;
   name: string;
-  description: string;
+  /** Shown in the UI as a sub-label. Tells the bot what kind of description to infer. */
+  descriptionHint: string;
   fields: CriteriaField[];
 }
 
-/** The four criteria we need structured data for, with their required fields. */
+/** The four criteria categories we collect structured data for. */
 export const CRITERIA_DEFINITIONS: CriteriaDefinition[] = [
   {
     id: "critical_role",
     name: "Critical Role",
-    description: "Founding Engineer at Bland",
+    descriptionHint: "The specific role / position held (e.g. 'CTO at Acme Inc')",
     fields: [
       { name: "start_date", type: "date" },
       { name: "end_date", type: "date" },
@@ -38,7 +42,7 @@ export const CRITERIA_DEFINITIONS: CriteriaDefinition[] = [
   {
     id: "high_remuneration",
     name: "High Remuneration",
-    description: "Founding Engineer at Bland",
+    descriptionHint: "The role / employer for which remuneration is being documented",
     fields: [
       { name: "work_location", type: "text" },
       { name: "salary", type: "text", hint: "Include currency" },
@@ -53,7 +57,7 @@ export const CRITERIA_DEFINITIONS: CriteriaDefinition[] = [
   {
     id: "original_contributions",
     name: "Original Contributions",
-    description: "Bland",
+    descriptionHint: "The organisation / field where the original contributions were made",
     fields: [
       {
         name: "work_description",
@@ -71,7 +75,7 @@ export const CRITERIA_DEFINITIONS: CriteriaDefinition[] = [
   {
     id: "membership",
     name: "Membership",
-    description: "Y Combinator",
+    descriptionHint: "The distinguished organisation the user is a member of (e.g. 'Y Combinator', 'National Academy of Sciences')",
     fields: [
       { name: "date_selected", type: "date" },
       { name: "proof_of_membership", type: "files_or_urls" },
