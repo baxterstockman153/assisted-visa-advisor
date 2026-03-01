@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { uploadAndIndexEvidenceFiles } from "@/lib/fileUpload";
+import { makeOpenAIClient } from "@/lib/openai";
 import { readUserVsId } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
@@ -23,6 +24,9 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const rawFiles = formData.getAll("files");
+    const apiKey = formData.get("apiKey") as string | null;
+
+    const client = makeOpenAIClient(apiKey ?? undefined);
 
     // formData.getAll returns (File | string)[]; keep only File instances.
     const files = rawFiles.filter((f): f is File => f instanceof File);
@@ -33,6 +37,7 @@ export async function POST(req: NextRequest) {
     const { fileIds, batchId } = await uploadAndIndexEvidenceFiles({
       vectorStoreId: userVsId,
       files,
+      client,
     });
 
     return NextResponse.json({ success: true, fileIds, batchId });

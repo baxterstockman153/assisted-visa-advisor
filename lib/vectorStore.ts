@@ -1,22 +1,22 @@
 // lib/vectorStore.ts
-import { openai } from "./openai";
+import OpenAI from "openai";
 
-export async function createVectorStore(name: string) {
-    const store = await openai.vectorStores.create({ name });
+export async function createVectorStore(name: string, client: OpenAI) {
+    const store = await client.vectorStores.create({ name });
     return store; // { id, name, ... }
 }
 
-export async function attachFilesToVectorStore(params: {
-    vectorStoreId: string;
-    fileIds: string[];
-}) {
+export async function attachFilesToVectorStore(
+    params: { vectorStoreId: string; fileIds: string[] },
+    client: OpenAI,
+) {
     const { vectorStoreId, fileIds } = params;
 
     if (fileIds.length === 0) {
         throw new Error("attachFilesToVectorStore: fileIds cannot be empty");
     }
 
-    const batch = await openai.vectorStores.fileBatches.create(vectorStoreId, {
+    const batch = await client.vectorStores.fileBatches.create(vectorStoreId, {
         file_ids: fileIds,
     });
 
@@ -27,24 +27,26 @@ function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function pollVectorStoreFileBatch(params: {
-    vectorStoreId: string;
-    batchId: string;
-    intervalMs?: number;
-    timeoutMs?: number;
-}) {
+export async function pollVectorStoreFileBatch(
+    params: {
+        vectorStoreId: string;
+        batchId: string;
+        intervalMs?: number;
+        timeoutMs?: number;
+    },
+    client: OpenAI,
+) {
     const { vectorStoreId, batchId, intervalMs = 1500, timeoutMs = 120_000 } = params;
 
     const start = Date.now();
 
     while (true) {
-        const batch = await openai.vectorStores.fileBatches.retrieve(vectorStoreId, batchId);
+        const batch = await client.vectorStores.fileBatches.retrieve(vectorStoreId, batchId);
 
         const counts = batch.file_counts ?? {};
         const inProgress = counts.in_progress ?? 0;
         const failed = counts.failed ?? 0;
 
-        // When ingestion finishes, in_progress typically becomes 0.
         if (inProgress === 0) {
             if (failed > 0) {
                 throw new Error(`Vector store ingestion finished with failures (failed=${failed}).`);

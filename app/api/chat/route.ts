@@ -14,7 +14,7 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
+import { makeOpenAIClient } from "@/lib/openai";
 import { readUserVsId, readDefsVsId } from "@/lib/session";
 import type { CriteriaInstance } from "@/lib/criteriaStorage";
 
@@ -337,7 +337,10 @@ export async function POST(req: NextRequest) {
       message?: string;
       history?: ConversationMessage[];
       criteriaInstances?: CriteriaInstance[];
+      apiKey?: string;
     };
+
+    const openai = makeOpenAIClient(body.apiKey);
 
     const message = body.message?.trim();
     if (!message) {
