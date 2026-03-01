@@ -1,49 +1,27 @@
 "use client";
 
 // app/dashboard/page.tsx
-// Main dashboard: 3-panel layout — criteria sidebar | upload bar + chat window.
+// Main dashboard: sidebar (intake progress) | chat window.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
-import CriteriaCards, { WhatWeNeedNext } from "./components/CriteriaCards";
+import IntakeProgress from "./components/IntakeProgress";
+import {
+  CASE_STRATEGY,
+  IntakeState,
+  initIntakeState,
+  applyExtracted,
+  FieldValue,
+} from "@/lib/caseStrategy";
+import type { ExtractedField, HistoryItem, DbCriterionRecord } from "../api/chat/route";
 
 // ---------------------------------------------------------------------------
-// Shared types (imported by child components)
+// Types kept for ChatWindow compatibility
 // ---------------------------------------------------------------------------
-
-export interface EvidenceItem {
-  file_id: string | null;
-  snippet: string;
-  why_it_matters: string;
-}
-
-export interface CriterionEntry {
-  criterion_id: string;
-  criterion_name: string;
-  strength: "strong" | "medium" | "weak";
-  rationale: string;
-  evidence: EvidenceItem[];
-  gaps: string[];
-  next_steps: string[];
-}
-
-export interface NotSupportedEntry {
-  criterion_id: string;
-  reason: string;
-}
-
-export interface CriteriaAnalysis {
-  top_criteria: CriterionEntry[];
-  other_possible_criteria: CriterionEntry[];
-  not_supported_yet: NotSupportedEntry[];
-  classification_guess: string;
-  disclaimer: string;
-}
 
 export interface Message {
   role: "user" | "assistant";
   content: string;
-  analysis?: CriteriaAnalysis;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,13 +30,19 @@ export interface Message {
 
 export default function DashboardPage() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [criteria, setCriteria] = useState<CriteriaAnalysis | null>(null);
+  // history mirrors messages but is sent to the API (excludes the current in-flight message)
+  const historyRef = useRef<HistoryItem[]>([]);
+
+  const [intakeState, setIntakeState] = useState<IntakeState>(() =>
+    initIntakeState(CASE_STRATEGY)
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const intakeStartedRef = useRef(false);
 
-  // Call /api/init once on mount to ensure stores exist and cookies are set.
+  // Call /api/init once on mount to ensure vector stores exist.
   useEffect(() => {
     fetch("/api/init", { method: "POST" })
       .then((r) => r.json())
@@ -69,37 +53,87 @@ export default function DashboardPage() {
       .catch((err: Error) => setInitError(err.message));
   }, []);
 
-  // ── Send a chat message ─────────────────────────────────────────────────
+  // Auto-start intake once initialised.
+  useEffect(() => {
+    if (isInitialized && !intakeStartedRef.current) {
+      intakeStartedRef.current = true;
+      callIntakeApi("__init__", intakeState, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInitialized]);
 
-  const handleSend = async (message: string) => {
-    if (!isInitialized || isLoading) return;
+  // ── Core API call ────────────────────────────────────────────────────────
 
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
+  const callIntakeApi = async (
+    message: string,
+    currentIntakeState: IntakeState,
+    addUserMessage: boolean
+  ) => {
     setIsLoading(true);
+
+    if (addUserMessage) {
+      setMessages((prev) => [...prev, { role: "user", content: message }]);
+    }
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({
+          message,
+          history: historyRef.current,
+          intakeState: currentIntakeState,
+        }),
       });
+
       const data = (await res.json()) as {
-        explanation?: string;
-        analysis?: CriteriaAnalysis;
+        message?: string;
+        extracted?: ExtractedField[];
+        intakeComplete?: boolean;
+        dbInstances?: DbCriterionRecord[] | null;
         error?: string;
       };
 
       if (data.error) throw new Error(data.error);
 
-      const asstMsg: Message = {
-        role: "assistant",
-        content: data.explanation ?? "(no explanation returned)",
-        analysis: data.analysis,
-      };
-      setMessages((prev) => [...prev, asstMsg]);
+      const asstContent = data.message ?? "(no response)";
+      setMessages((prev) => [...prev, { role: "assistant", content: asstContent }]);
 
-      // Update criteria sidebar whenever we get a fresh analysis.
-      if (data.analysis) setCriteria(data.analysis);
+      // Update history ref with both turns
+      if (addUserMessage) {
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "user", content: message },
+          { role: "assistant", content: asstContent },
+        ];
+      } else {
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "assistant", content: asstContent },
+        ];
+      }
+
+      // Merge extracted fields into intake state
+      if (data.extracted && data.extracted.length > 0) {
+        const extracted = data.extracted as Array<{
+          criterion_name: string;
+          field_name: string;
+          value: FieldValue;
+        }>;
+        setIntakeState((prev) => {
+          const next = applyExtracted(prev, extracted);
+          return next;
+        });
+      }
+
+      // Log DB instances to console when intake is complete
+      if (data.intakeComplete && data.dbInstances) {
+        console.log(
+          "%c✅ INTAKE COMPLETE — DB Instances",
+          "color: #16a34a; font-weight: bold; font-size: 14px;"
+        );
+        console.log(JSON.stringify(data.dbInstances, null, 2));
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -110,7 +144,18 @@ export default function DashboardPage() {
     }
   };
 
-  // ── Upload evidence files ───────────────────────────────────────────────
+  // ── User sends a chat message ─────────────────────────────────────────────
+
+  const handleSend = (message: string) => {
+    if (!isInitialized || isLoading) return;
+    // Capture current intakeState synchronously (before any state updates)
+    setIntakeState((prev) => {
+      callIntakeApi(message, prev, true);
+      return prev;
+    });
+  };
+
+  // ── Upload evidence files ─────────────────────────────────────────────────
 
   const handleUpload = async (files: File[]) => {
     const fd = new FormData();
@@ -120,11 +165,22 @@ export default function DashboardPage() {
     const data = (await res.json()) as { success?: boolean; fileIds?: string[]; error?: string };
 
     if (!res.ok || data.error) throw new Error(data.error ?? "Upload failed");
-    setUploadedFiles((prev) => [...prev, ...files.map((f) => f.name)]);
+
+    const names = files.map((f) => f.name);
+    setUploadedFiles((prev) => [...prev, ...names]);
+
+    // Inject an upload notification into the conversation so the model
+    // knows which files are now available and can map them to fields.
+    const uploadMsg = `[Uploaded: ${names.join(", ")}]`;
+    setIntakeState((prev) => {
+      callIntakeApi(uploadMsg, prev, true);
+      return prev;
+    });
+
     return data;
   };
 
-  // ── Error screen ────────────────────────────────────────────────────────
+  // ── Error screen ──────────────────────────────────────────────────────────
 
   if (initError) {
     return (
@@ -138,27 +194,22 @@ export default function DashboardPage() {
     );
   }
 
-  // ── Main layout ─────────────────────────────────────────────────────────
+  // ── Main layout ───────────────────────────────────────────────────────────
 
   return (
     <div style={dp.layout}>
-      {/* ── Left sidebar: criteria cards + what we need next ── */}
+      {/* ── Left sidebar: intake progress tracker ── */}
       <aside style={dp.sidebar}>
         <div style={dp.sidebarHead}>
-          <span style={dp.sidebarTitle}>Criteria Assessment</span>
+          <span style={dp.sidebarTitle}>Intake Progress</span>
           {!isInitialized && <span style={dp.initBadge}>Initialising…</span>}
         </div>
-
-        {/* Scrollable criteria area */}
         <div style={dp.sidebarBody}>
-          <CriteriaCards criteria={criteria} />
+          <IntakeProgress intakeState={intakeState} />
         </div>
-
-        {/* Pinned "What We Need Next" footer */}
-        <WhatWeNeedNext criteria={criteria} onSend={handleSend} />
       </aside>
 
-      {/* ── Main panel: chat (upload integrated into input row) ── */}
+      {/* ── Main panel: chat ── */}
       <main style={dp.main}>
         <ChatWindow
           messages={messages}
@@ -186,10 +237,9 @@ const dp: Record<string, React.CSSProperties> = {
     background: "#f1f0ff",
     overflow: "hidden",
   },
-  /* Sidebar */
   sidebar: {
-    width: 320,
-    minWidth: 240,
+    width: 300,
+    minWidth: 220,
     display: "flex",
     flexDirection: "column",
     background: "#fff",
@@ -223,7 +273,6 @@ const dp: Record<string, React.CSSProperties> = {
     overflowY: "auto",
     padding: 12,
   },
-  /* Main panel */
   main: {
     flex: 1,
     display: "flex",
@@ -231,7 +280,6 @@ const dp: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     minWidth: 0,
   },
-  /* Error page */
   errorPage: {
     display: "flex",
     flexDirection: "column",

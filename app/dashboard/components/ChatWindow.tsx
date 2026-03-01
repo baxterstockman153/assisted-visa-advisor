@@ -9,7 +9,7 @@ type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 const AVA_GREETING = "Hi, I'm Ava.";
 const AVA_SUBTITLE =
-  "Your O-1 visa advisor. I'll help you map your achievements to the criteria that matter — and build the strongest case for your petition.";
+  "I'm your O-1 visa intake specialist. I'll guide you through providing the information your attorney needs — one step at a time. Feel free to ask questions at any point.";
 
 interface Props {
   messages: Message[];
@@ -120,18 +120,18 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
                 {/* 3-step process */}
                 <div className="fade-slide-in" style={{ ...cw.steps, animationDelay: "0.08s" }}>
                   <div style={cw.step}>
-                    <div style={cw.stepIcon}>📄</div>
+                    <div style={cw.stepIcon}>💬</div>
+                    <div style={cw.stepLabel}>Answer questions</div>
+                  </div>
+                  <div style={cw.stepArrow}>→</div>
+                  <div style={cw.step}>
+                    <div style={cw.stepIcon}>📎</div>
                     <div style={cw.stepLabel}>Upload evidence</div>
                   </div>
                   <div style={cw.stepArrow}>→</div>
                   <div style={cw.step}>
-                    <div style={cw.stepIcon}>🔍</div>
-                    <div style={cw.stepLabel}>Map to criteria</div>
-                  </div>
-                  <div style={cw.stepArrow}>→</div>
-                  <div style={cw.step}>
                     <div style={cw.stepIcon}>✅</div>
-                    <div style={cw.stepLabel}>Build your case</div>
+                    <div style={cw.stepLabel}>Case submitted</div>
                   </div>
                 </div>
 
@@ -143,41 +143,10 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
                   className="fade-slide-in"
                   style={{ ...cw.hintText, animationDelay: "0.14s" }}
                 >
-                  Upload your documents using the{" "}
-                  <strong style={{ color: "#7c3aed" }}>+</strong> button, or describe your
-                  background to get started:
+                  Getting ready — Ava will ask you for each required piece of information.
+                  Use the <strong style={{ color: "#7c3aed" }}>+</strong> button to upload
+                  files at any time, or paste URLs directly in the chat.
                 </p>
-
-                {/* Example pills */}
-                <div
-                  className="fade-slide-in"
-                  style={{ ...cw.pills, animationDelay: "0.22s" }}
-                >
-                  <button
-                    style={cw.pill}
-                    onClick={() =>
-                      !disabled &&
-                      onSend(
-                        "I have a PhD, 20 peer-reviewed papers with 800 citations, and led engineering at a YC startup. What are my best O-1A criteria?"
-                      )
-                    }
-                    disabled={disabled}
-                  >
-                    "I have a PhD and 20 papers — what are my best O-1A criteria?"
-                  </button>
-                  <button
-                    style={cw.pill}
-                    onClick={() =>
-                      !disabled &&
-                      onSend(
-                        "I'm an artist with international exhibitions. How do I qualify for O-1B?"
-                      )
-                    }
-                    disabled={disabled}
-                  >
-                    "I'm an artist with international exhibitions. How do I qualify for O-1B?"
-                  </button>
-                </div>
               </>
             )}
           </div>
