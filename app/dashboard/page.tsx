@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import ChatWindow from "./components/ChatWindow";
-import CriteriaCards from "./components/CriteriaCards";
+import CriteriaCards, { WhatWeNeedNext } from "./components/CriteriaCards";
 
 // ---------------------------------------------------------------------------
 // Shared types (imported by child components)
@@ -142,15 +142,20 @@ export default function DashboardPage() {
 
   return (
     <div style={dp.layout}>
-      {/* ── Left sidebar: criteria cards ── */}
+      {/* ── Left sidebar: criteria cards + what we need next ── */}
       <aside style={dp.sidebar}>
         <div style={dp.sidebarHead}>
           <span style={dp.sidebarTitle}>Criteria Assessment</span>
           {!isInitialized && <span style={dp.initBadge}>Initialising…</span>}
         </div>
+
+        {/* Scrollable criteria area */}
         <div style={dp.sidebarBody}>
           <CriteriaCards criteria={criteria} />
         </div>
+
+        {/* Pinned "What We Need Next" footer */}
+        <WhatWeNeedNext criteria={criteria} onSend={handleSend} />
       </aside>
 
       {/* ── Main panel: chat (upload integrated into input row) ── */}

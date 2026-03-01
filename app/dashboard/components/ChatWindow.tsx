@@ -9,7 +9,7 @@ type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 const AVA_GREETING = "Hi, I'm Ava.";
 const AVA_SUBTITLE =
-  "Your Assisted Visa Advisor. I know the O-1 process can feel overwhelming — I'm here to help you organise your evidence and build a compelling application, one clear step at a time.";
+  "Your O-1 visa advisor. I'll help you map your achievements to the criteria that matter — and build the strongest case for your petition.";
 
 interface Props {
   messages: Message[];
@@ -101,55 +101,84 @@ export default function ChatWindow({ messages, isLoading, disabled, onSend, onUp
       <div style={cw.feed}>
         {showIntro && (
           <div style={cw.intro}>
+            {/* Ava avatar */}
+            <div style={cw.avaAvatar}>A</div>
+
+            {/* Greeting with typewriter */}
             <div style={cw.greeting}>
               {displayedGreeting}
               {!greetingDone && <span className="ava-cursor">|</span>}
             </div>
+
             {greetingDone && (
-              <p className="fade-slide-in" style={cw.subtitle}>
-                {AVA_SUBTITLE}
-              </p>
-            )}
-            {greetingDone && (
-              <p
-                className="fade-slide-in"
-                style={{ ...cw.subtitle, ...cw.hintText, animationDelay: "0.12s" }}
-              >
-                Upload your documents using the{" "}
-                <strong style={{ color: "#7c3aed" }}>+</strong> button, or describe your
-                background to get started:
-              </p>
-            )}
-            {greetingDone && (
-              <div
-                className="fade-slide-in"
-                style={{ ...cw.pills, animationDelay: "0.25s" }}
-              >
-                <button
-                  style={cw.pill}
-                  onClick={() =>
-                    !disabled &&
-                    onSend(
-                      "I have a PhD, 20 peer-reviewed papers with 800 citations, and led engineering at a YC startup. What are my best O-1A criteria?"
-                    )
-                  }
-                  disabled={disabled}
+              <>
+                {/* Subtitle */}
+                <p className="fade-slide-in" style={cw.subtitle}>
+                  {AVA_SUBTITLE}
+                </p>
+
+                {/* 3-step process */}
+                <div className="fade-slide-in" style={{ ...cw.steps, animationDelay: "0.08s" }}>
+                  <div style={cw.step}>
+                    <div style={cw.stepIcon}>📄</div>
+                    <div style={cw.stepLabel}>Upload evidence</div>
+                  </div>
+                  <div style={cw.stepArrow}>→</div>
+                  <div style={cw.step}>
+                    <div style={cw.stepIcon}>🔍</div>
+                    <div style={cw.stepLabel}>Map to criteria</div>
+                  </div>
+                  <div style={cw.stepArrow}>→</div>
+                  <div style={cw.step}>
+                    <div style={cw.stepIcon}>✅</div>
+                    <div style={cw.stepLabel}>Build your case</div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="fade-slide-in" style={{ ...cw.divider, animationDelay: "0.12s" }} />
+
+                {/* Hint */}
+                <p
+                  className="fade-slide-in"
+                  style={{ ...cw.hintText, animationDelay: "0.14s" }}
                 >
-                  "I have a PhD and 20 papers — what are my best O-1A criteria?"
-                </button>
-                <button
-                  style={cw.pill}
-                  onClick={() =>
-                    !disabled &&
-                    onSend(
-                      "I'm an artist with international exhibitions. How do I qualify for O-1B?"
-                    )
-                  }
-                  disabled={disabled}
+                  Upload your documents using the{" "}
+                  <strong style={{ color: "#7c3aed" }}>+</strong> button, or describe your
+                  background to get started:
+                </p>
+
+                {/* Example pills */}
+                <div
+                  className="fade-slide-in"
+                  style={{ ...cw.pills, animationDelay: "0.22s" }}
                 >
-                  "I'm an artist with international exhibitions. How do I qualify for O-1B?"
-                </button>
-              </div>
+                  <button
+                    style={cw.pill}
+                    onClick={() =>
+                      !disabled &&
+                      onSend(
+                        "I have a PhD, 20 peer-reviewed papers with 800 citations, and led engineering at a YC startup. What are my best O-1A criteria?"
+                      )
+                    }
+                    disabled={disabled}
+                  >
+                    "I have a PhD and 20 papers — what are my best O-1A criteria?"
+                  </button>
+                  <button
+                    style={cw.pill}
+                    onClick={() =>
+                      !disabled &&
+                      onSend(
+                        "I'm an artist with international exhibitions. How do I qualify for O-1B?"
+                      )
+                    }
+                    disabled={disabled}
+                  >
+                    "I'm an artist with international exhibitions. How do I qualify for O-1B?"
+                  </button>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -314,40 +343,101 @@ const cw: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     textAlign: "center",
-    padding: "56px 32px 32px",
+    padding: "40px 32px 24px",
     flex: 1,
-    maxWidth: 580,
+    maxWidth: 560,
     margin: "0 auto",
     width: "100%",
   },
+  avaAvatar: {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: 700,
+    marginBottom: 20,
+    boxShadow: "0 8px 24px rgba(79,70,229,0.22)",
+    flexShrink: 0,
+    letterSpacing: "-0.01em",
+  },
   greeting: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: 700,
     color: "#1e1b4b",
-    marginBottom: 18,
+    marginBottom: 14,
     letterSpacing: "-0.025em",
     lineHeight: 1.2,
-    minHeight: 48,
+    minHeight: 44,
   },
   subtitle: {
     fontSize: 15,
     color: "#4b5563",
-    maxWidth: 490,
-    lineHeight: 1.75,
-    margin: "0 0 14px",
+    maxWidth: 460,
+    lineHeight: 1.7,
+    margin: "0 0 20px",
+  },
+  steps: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    maxWidth: 460,
+    marginBottom: 4,
+  },
+  step: {
+    flex: 1,
+    background: "#f5f3ff",
+    border: "1px solid #e0deff",
+    borderRadius: 10,
+    padding: "12px 8px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+  },
+  stepIcon: {
+    fontSize: 20,
+    lineHeight: 1,
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#4f46e5",
+    lineHeight: 1.3,
+    textAlign: "center" as const,
+  },
+  stepArrow: {
+    color: "#c4b5fd",
+    fontSize: 16,
+    flexShrink: 0,
+    fontWeight: 300,
+  },
+  divider: {
+    width: "100%",
+    maxWidth: 460,
+    height: 1,
+    background: "#e8e5ff",
+    margin: "16px 0 14px",
+    flexShrink: 0,
   },
   hintText: {
     fontSize: 13,
     color: "#6b7280",
-    marginTop: 0,
+    margin: "0 0 10px",
+    lineHeight: 1.6,
+    maxWidth: 460,
   },
   pills: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     width: "100%",
-    maxWidth: 490,
-    marginTop: 8,
+    maxWidth: 460,
   },
   pill: {
     background: "#f5f3ff",

@@ -167,7 +167,122 @@ export default function CriteriaCards({ criteria }: { criteria: CriteriaAnalysis
 }
 
 // ---------------------------------------------------------------------------
-// Styles
+// WhatWeNeedNext (named export — rendered pinned in sidebar footer)
+// ---------------------------------------------------------------------------
+
+export function WhatWeNeedNext({
+  criteria,
+  onSend,
+}: {
+  criteria: CriteriaAnalysis | null;
+  onSend?: (message: string) => void;
+}) {
+  if (!criteria) return null;
+
+  const strongCount = criteria.top_criteria.filter((c) => c.strength === "strong").length;
+  const hasThreeStrong = strongCount >= 3;
+
+  if (hasThreeStrong) {
+    return (
+      <div style={wn.box}>
+        <div style={wn.header}>
+          <span style={wn.headerTitle}>Ready to File</span>
+        </div>
+
+        <div style={wn.successBanner}>
+          <div style={wn.successEmoji}>🎉</div>
+          <div>
+            <div style={wn.successTitle}>3 strong qualifications found!</div>
+            <div style={wn.successDesc}>
+              Your case looks ready for professional attorney review.
+            </div>
+          </div>
+        </div>
+
+        <button
+          style={wn.attorneyBtn}
+          onClick={() => alert("to be implemented")}
+        >
+          Send to Attorney →
+        </button>
+
+        <p style={wn.legalNote}>
+          An attorney can review your evidence package and file your O-1 petition.
+        </p>
+      </div>
+    );
+  }
+
+  // Not enough strong qualifications — show guidance
+  const needed = Math.max(0, 3 - strongCount);
+
+  return (
+    <div style={wn.box}>
+      <div style={wn.header}>
+        <span style={wn.headerTitle}>What We Need Next</span>
+      </div>
+
+      {/* Progress indicator */}
+      <div style={wn.progress}>
+        <div style={wn.progressLabel}>
+          <span>{strongCount} of 3 strong criteria</span>
+          <span style={{ color: needed > 0 ? "#b91c1c" : "#16a34a", fontWeight: 600 }}>
+            {needed > 0 ? `${needed} more needed` : "almost there!"}
+          </span>
+        </div>
+        <div style={wn.progressTrack}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                ...wn.progressSegment,
+                background: i < strongCount ? "#16a34a" : "#e2e8f0",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Action steps */}
+      <div style={wn.steps}>
+        {/* Step 1: Upload more evidence */}
+        <div style={wn.step}>
+          <div style={wn.stepNum}>1</div>
+          <div style={wn.stepContent}>
+            <div style={wn.stepTitle}>Upload more evidence</div>
+            <div style={wn.stepDesc}>
+              Add recommendation letters, publications, awards, media coverage, or salary data.
+            </div>
+          </div>
+        </div>
+
+        {/* Step 2: Brainstorm with Ava */}
+        <div style={wn.step}>
+          <div style={wn.stepNum}>2</div>
+          <div style={wn.stepContent}>
+            <div style={wn.stepTitle}>Brainstorm with Ava</div>
+            <div style={wn.stepDesc}>
+              Discover hidden qualifications you might be overlooking.
+            </div>
+            <button
+              style={wn.brainstormBtn}
+              onClick={() =>
+                onSend?.(
+                  "Let's brainstorm together. Based on my background and what's been assessed so far, walk me through each O-1 criterion I'm not yet meeting. For each one, give me specific and concrete examples of evidence or achievements that would qualify — things I might be overlooking or undervaluing."
+                )
+              }
+            >
+              Start Brainstorming →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles — CriteriaCards
 // ---------------------------------------------------------------------------
 
 const cs: Record<string, React.CSSProperties> = {
@@ -265,5 +380,158 @@ const cs: Record<string, React.CSSProperties> = {
     marginTop: 16,
     paddingTop: 12,
     borderTop: "1px solid #f1f5f9",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Styles — WhatWeNeedNext
+// ---------------------------------------------------------------------------
+
+const wn: Record<string, React.CSSProperties> = {
+  box: {
+    background: "#fafaf9",
+    borderTop: "2px solid #e8e5ff",
+    padding: "14px 12px 16px",
+    flexShrink: 0,
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#7c3aed",
+    textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  },
+  /* Success / ready-to-file state */
+  successBanner: {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-start",
+    background: "#f0fdf4",
+    border: "1px solid #bbf7d0",
+    borderRadius: 8,
+    padding: "10px 12px",
+    marginBottom: 10,
+  },
+  successEmoji: {
+    fontSize: 18,
+    flexShrink: 0,
+    lineHeight: 1,
+    marginTop: 1,
+  },
+  successTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#166534",
+    marginBottom: 2,
+  },
+  successDesc: {
+    fontSize: 11,
+    color: "#4b5563",
+    lineHeight: 1.45,
+  },
+  attorneyBtn: {
+    width: "100%",
+    padding: "10px",
+    background: "#4f46e5",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "center",
+    marginBottom: 8,
+    fontFamily: "inherit",
+  },
+  legalNote: {
+    fontSize: 10,
+    color: "#94a3b8",
+    textAlign: "center",
+    margin: 0,
+    fontStyle: "italic",
+    lineHeight: 1.4,
+  },
+  /* Progress */
+  progress: {
+    marginBottom: 12,
+  },
+  progressLabel: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 11,
+    color: "#64748b",
+    marginBottom: 6,
+    fontWeight: 500,
+  },
+  progressTrack: {
+    display: "flex",
+    gap: 4,
+  },
+  progressSegment: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    transition: "background 0.3s",
+  },
+  /* Action steps */
+  steps: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  step: {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-start",
+    background: "#fff",
+    border: "1px solid #e8e5ff",
+    borderRadius: 8,
+    padding: "10px 12px",
+  },
+  stepNum: {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: "#ede9fe",
+    color: "#7c3aed",
+    fontSize: 11,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  stepContent: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#1e293b",
+    marginBottom: 3,
+  },
+  stepDesc: {
+    fontSize: 11,
+    color: "#64748b",
+    lineHeight: 1.45,
+  },
+  brainstormBtn: {
+    display: "inline-block",
+    marginTop: 8,
+    padding: "5px 12px",
+    background: "#f5f3ff",
+    border: "1px solid #ddd6fe",
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#4f46e5",
+    cursor: "pointer",
+    fontFamily: "inherit",
   },
 };
