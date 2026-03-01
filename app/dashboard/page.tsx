@@ -13,7 +13,7 @@ import {
   applyExtracted,
   FieldValue,
 } from "@/lib/caseStrategy";
-import type { ExtractedField, HistoryItem, DbCriterionRecord } from "../api/chat/route";
+import type { ExtractedField, HistoryItem, DbCriterionRecord, CriterionAssessment } from "../api/chat/route";
 
 // ---------------------------------------------------------------------------
 // Types kept for ChatWindow compatibility
@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const [intakeState, setIntakeState] = useState<IntakeState>(() =>
     initIntakeState(CASE_STRATEGY)
   );
+  const [criterionAssessment, setCriterionAssessment] = useState<CriterionAssessment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export default function DashboardPage() {
       const data = (await res.json()) as {
         message?: string;
         extracted?: ExtractedField[];
+        criterionAssessment?: CriterionAssessment[];
         intakeComplete?: boolean;
         dbInstances?: DbCriterionRecord[] | null;
         error?: string;
@@ -111,6 +113,11 @@ export default function DashboardPage() {
           ...historyRef.current,
           { role: "assistant", content: asstContent },
         ];
+      }
+
+      // Update strength assessments whenever we get them
+      if (data.criterionAssessment && data.criterionAssessment.length > 0) {
+        setCriterionAssessment(data.criterionAssessment);
       }
 
       // Merge extracted fields into intake state
@@ -205,7 +212,7 @@ export default function DashboardPage() {
           {!isInitialized && <span style={dp.initBadge}>Initialising…</span>}
         </div>
         <div style={dp.sidebarBody}>
-          <IntakeProgress intakeState={intakeState} />
+          <IntakeProgress intakeState={intakeState} criterionAssessment={criterionAssessment} />
         </div>
       </aside>
 

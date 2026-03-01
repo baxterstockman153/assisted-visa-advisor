@@ -30,9 +30,16 @@ export interface DbCriterionRecord {
   fields: Record<string, FieldValue>;
 }
 
+export interface CriterionAssessment {
+  criterion_name: string;
+  strength: "strong" | "medium" | "weak" | "pending";
+  rationale: string;
+}
+
 export interface IntakeChatResponse {
   message: string;
   extracted: ExtractedField[];
+  criterionAssessment: CriterionAssessment[];
   intakeComplete: boolean;
   dbInstances: DbCriterionRecord[] | null;
 }
@@ -87,17 +94,44 @@ RESPONSE FORMAT — follow this EXACTLY:
       "value": "2022-03-01"
     }
   ],
+  "criterion_assessment": [
+    {
+      "criterion_name": "Critical Role",
+      "strength": "weak",
+      "rationale": "Start date provided but key responsibilities and examples are still missing."
+    },
+    {
+      "criterion_name": "High Remuneration",
+      "strength": "pending",
+      "rationale": "No information collected yet."
+    }
+  ],
   "intake_complete": false,
   "db_instances": null
 }
 
 ═══════════════════════════════════════════════
-EXTRACTION RULES:
-• "extracted": NEW field values found in the user's LATEST message only. Use [] if nothing new was provided.
+EXTRACTION RULES — read carefully:
+
+ANTI-HALLUCINATION (most important rule):
+• "extracted" MUST only contain values the user explicitly stated in their LATEST message.
+• If the message is "__init__" or does not contain a direct answer to a field question, "extracted" MUST be []. Never invent, infer, or assume values.
+• Do NOT pre-fill fields based on the company/role names in the case strategy. Wait for the user to provide them.
+
+Field extraction:
 • Dates → ISO format YYYY-MM-DD, or the string "present" if the role is ongoing.
 • Text → copy the user's answer verbatim (trimmed).
-• files / files_or_urls → string[] of filenames and/or full URLs. Parse filenames from the message or from upload notifications like "[Uploaded: paystub.pdf]".
-• "intake_complete": true ONLY when every field in every criterion has a non-null value.
+• files / files_or_urls → string[] of filenames and/or full URLs. Parse filenames only from upload notifications like "[Uploaded: paystub.pdf]" or explicit URL pastes in the message.
+
+Criterion assessment (include ALL criteria every turn):
+• "pending" — no fields have been collected for this criterion yet.
+• "weak"    — 1 or more fields collected but significant information is still missing.
+• "medium"  — most fields collected; minor gaps or brief answers remain.
+• "strong"  — all fields collected with substantive, detailed responses.
+• Base the rating solely on values already in CURRENT INTAKE STATE, not on what the user just said.
+
+Completion:
+• "intake_complete": true ONLY when every field in every criterion has a non-null value in the intake state.
 • "db_instances": populate ONLY when intake_complete is true, using this shape:
   [
     {
@@ -121,37 +155,38 @@ EXTRACTION RULES:
 function parseIntakeResponse(raw: string): {
   message: string;
   extracted: ExtractedField[];
+  criterionAssessment: CriterionAssessment[];
   intakeComplete: boolean;
   dbInstances: DbCriterionRecord[] | null;
 } {
   const DELIM = "---JSON---";
   const idx = raw.indexOf(DELIM);
 
-  if (idx === -1) {
-    // No delimiter — treat entire response as message, no extraction
-    return { message: raw.trim(), extracted: [], intakeComplete: false, dbInstances: null };
-  }
+  const empty = { message: raw.trim(), extracted: [], criterionAssessment: [], intakeComplete: false, dbInstances: null };
+
+  if (idx === -1) return empty;
 
   const message = raw.slice(0, idx).trim();
   let jsonStr = raw.slice(idx + DELIM.length).trim();
-  // Strip accidental markdown fences
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "");
 
   try {
     const parsed = JSON.parse(jsonStr) as {
       extracted: ExtractedField[];
+      criterion_assessment: CriterionAssessment[];
       intake_complete: boolean;
       db_instances: DbCriterionRecord[] | null;
     };
     return {
       message,
       extracted: parsed.extracted ?? [],
+      criterionAssessment: parsed.criterion_assessment ?? [],
       intakeComplete: parsed.intake_complete ?? false,
       dbInstances: parsed.db_instances ?? null,
     };
   } catch (e) {
     console.warn("[chat] Failed to parse intake JSON:", e);
-    return { message, extracted: [], intakeComplete: false, dbInstances: null };
+    return { ...empty, message };
   }
 }
 
@@ -198,7 +233,7 @@ export async function POST(req: NextRequest) {
       console.log("════════════════════════════════════════\n");
     }
 
-    return NextResponse.json(result satisfies IntakeChatResponse);
+    return NextResponse.json(result as IntakeChatResponse);
   } catch (err) {
     console.error("[chat] Error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
