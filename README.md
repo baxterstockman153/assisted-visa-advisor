@@ -88,3 +88,8 @@ This is a proof of concept. Some things were left out intentionally:
 - Add a progress indicator so users know how complete their case profile is
 - Citation rendering — both to ground Ava's analysis in verifiable source material and to make paralegal review faster and more auditable. 
 - Contextual help links — surface relevant internal guides or external USCIS resources inline, so applicants can go deeper on any criterion without leaving the conversation.
+
+## Video walkthrough demos
+
+- [Ava analyzing document](https://youtu.be/vmWwROz2ItY)
+- [Talking to Ava](https://youtu.be/d1MJEajxTks)
